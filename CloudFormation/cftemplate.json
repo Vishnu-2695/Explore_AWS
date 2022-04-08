@@ -1,1 +1,96 @@
 
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Description" : "Template for ASG - Launch template + auto scaling group",
+
+    "Resources" :{
+        "ASGLaunchTemplate" : {
+            "Type" : "AWS::EC2::LaunchTemplate",
+            "Properties" : {
+                "LaunchTemplateName" : "flaskappLT",
+                "LaunchTemplateData" : {
+                    "ImageId" : "ami-0d51081d15d1ec887",
+                    "InstanceType" : "t2.micro",
+                    "KeyName" : "UK-KP",
+                    "SecurityGroups" : ["app_test_sg"]
+                }
+            }
+        },
+        "ASGMain" : {
+            "Type" : "AWS::AutoScaling::AutoScalingGroup",
+            "Properties" : {
+                "AutoScalingGroupName" : "flaskappASG",
+                "AvailabilityZones" : ["eu-west-2a","eu-west-2b"],
+                "DesiredCapacity" : "2",
+                "HealthCheckGracePeriod" : 300,
+                "HealthCheckType" : "EC2",
+                "LaunchTemplate": {
+                    "LaunchTemplateId" : {"Ref" : "ASGLaunchTemplate"},
+                    "Version" : {"Fn::GetAtt" : ["ASGLaunchTemplate" , "DefaultVersionNumber"]}
+                },
+                "MaxSize" : "3",
+                "MinSize" : "1",
+                "NewInstancesProtectedFromScaleIn" : "False",
+                "TargetGroupARNs" : [{"Ref" : "AppLBTargetGroup"}]
+            }
+        },
+        "ASGScalingPolicy" : {
+            "Type" : "AWS::AutoScaling::ScalingPolicy",
+            "Properties" : {
+                "AutoScalingGroupName" : {"Ref" : "ASGMain"},
+                "EstimatedInstanceWarmup" : 300,
+                "PolicyType" : "TargetTrackingScaling",
+                "TargetTrackingConfiguration" : {
+                    "DisableScaleIn" : false,
+                    "PredefinedMetricSpecification" : {
+                        "PredefinedMetricType" : "ASGAverageCPUUtilization"
+                    },
+                    "TargetValue" : 50.00
+                }
+            }
+        },
+        "AppLoadBalancer" : {
+            "Type" : "AWS::ElasticLoadBalancingV2::LoadBalancer",
+            "Properties" : {
+                "Name" : "flaskappELB",
+                "Scheme" : "internet-facing",
+                "Type" : "application",
+                "Subnets" : ["subnet-0c390a131351d766e","subnet-01946e537b02b32d9"]
+            }
+        },
+        "AppLBTargetGroup" : {
+            "Type" : "AWS::ElasticLoadBalancingV2::TargetGroup",
+            "Properties" : {
+                "Name" : "flaskappELBTG",
+                "Protocol" : "HTTP",
+                "Port" : 80,
+                "TargetType" : "instance",
+                "VpcId" : "vpc-0e9b3821a27ae800c"
+            }
+        },
+        "AppLBListener" : {
+            "Type" : "AWS::ElasticLoadBalancingV2::Listener",
+            "Properties" : {
+                "DefaultActions" : [
+                    {
+                        "Type" : "forward",
+                        "TargetGroupARN" : {"Ref" : "AppLBTargetGroup"}
+                    }
+                ],
+                "LoadBalancerArn" : {"Ref" : "AppLoadBalancer"},
+                "Port" : 80,
+                "Protocol" : "HTTP"
+            }
+        }
+    },
+    "Outputs" : {
+        "TemplateID" : {
+            "Description" : "ID of Launch Template generated",
+            "Value" : {"Ref" : "ASGLaunchTemplate"}
+        },
+        "ASGId" : {
+            "Description" : "ID of the scaling group created",
+            "Value" : {"Ref" : "ASGMain"}
+        }
+    }
+}
